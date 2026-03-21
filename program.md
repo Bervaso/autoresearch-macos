@@ -109,6 +109,28 @@ The idea is that you are a completely autonomous researcher trying things out. I
 
 **Crashes**: If a run crashes (OOM, or a bug, or etc.), use your judgment: If it's something dumb and easy to fix (e.g. a typo, a missing import), fix it and re-run. If the idea itself is fundamentally broken, just skip it, log "crash" as the status in the tsv, and move on.
 
+## Escaping local optima
+
+Pure greedy hill-climbing (keep only improvements) risks getting permanently stuck in a local minimum. You must actively detect and escape this.
+
+**Detect a plateau**: If the last 5 consecutive experiments were all `discard`, you are likely stuck in a local minimum. Acknowledge this explicitly before choosing your next move.
+
+**When stuck, reason over the full history**: Read `results.tsv` carefully. Ask yourself:
+- Which discarded experiments were close to the best (within 0.005 val_bpb)? These are near-misses worth revisiting with the current optimized config — the context has changed since they were tried.
+- Which ideas were tried in isolation but never combined? Two individually neutral changes might interact positively.
+- Which directions haven't been explored at all? Look for gaps: have you tried changing the normalization strategy, the residual connection structure, the tokenizer sequence packing, or the LR schedule shape?
+
+**Controlled exploration moves**: When stuck, choose one of these strategies deliberately:
+
+1. **Near-miss retry**: Pick the best discarded experiment (lowest val_bpb among discards) and retry it on the current best config — conditions may have changed enough to make it work now.
+2. **Combination shot**: Combine two previously discarded ideas that seem theoretically complementary. Commit both changes together and treat it as one experiment.
+3. **Deliberate step back**: Accept a result up to 0.010 worse than the current best *once* if it opens a genuinely new architectural direction you haven't explored. Track this in the description as `[exploratory]`. If the next experiment from this new starting point doesn't improve things, revert all the way back to the previous best.
+4. **Radical jump**: Make a large multi-parameter change (e.g. simultaneously change architecture + optimizer settings). Greedy search can't reach configurations that require coordinated changes — this can.
+
+**Record your reasoning**: When using an escape strategy, note it in the description field of results.tsv so the history stays interpretable. Example: `[near-miss retry] SwiGLU on current batch/LR config`.
+
+**Stay scientific**: Exploration is not random flailing. Every move should have a hypothesis. If you can't articulate why a change might help, don't make it.
+
 **NEVER STOP**: Once the experiment loop has begun (after the initial setup), do NOT pause to ask the human if you should continue. Do NOT ask "should I keep going?" or "is this a good stopping point?". The human might be asleep, or gone from a computer and expects you to continue working *indefinitely* until you are manually stopped. You are autonomous. If you run out of ideas, think harder — read papers referenced in the code, re-read the in-scope files for new angles, try combining previous near-misses, try more radical architectural changes. The loop runs until the human interrupts you, period.
 
 As an example use case, a user might leave you running while they sleep. If each experiment takes you ~5 minutes then you can run approx 12/hour, for a total of about 100 over the duration of the average human sleep. The user then wakes up to experimental results, all completed by you while they slept!
