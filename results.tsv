@@ -1,2 +1,23 @@
 commit	val_bpb	memory_gb	status	description
 d2f02c9	1.291623	0.0	keep	baseline (best from session 1)
+65ee487	1.291479	0.0	keep	EMBEDDING_LR 0.2
+cf62e62	1.290205	0.0	keep	[combo] MLP 5x + no softcap
+8324cb6	1.285372	0.0	keep	MLP 6x
+ebc5172	1.286943	0.0	discard	MATRIX_LR 0.015
+7e5e63c	1.285723	0.0	discard	UNEMBED_LR 0.003 (near-miss)
+9f82db8	1.288919	0.0	discard	UNEMBED_LR 0.005
+b181b31	1.288591	0.0	discard	Muon ramp 100
+dea55ae	1.288095	0.0	discard	WINDOW LSSS
+e46d5ee	1.286221	0.0	discard	[combo] UNEMBED+WARMDOWN
+90ceb21	1.287588	0.0	discard	depth=3 MLP 8x
+a1e2f5e	1.293041	0.0	discard	VE last only
+68e2bcc	1.288337	0.0	discard	RoPE base 50k
+5028dd5	1.286431	0.0	discard	SCALAR_LR 0.5
+508dc6b	1.307184	0.0	discard	parallel attn+MLP
+442d7b4	3.215849	0.0	discard	weight tying
+8f3a798	1.305080	0.0	discard	no QK norm
+3c44255	1.295039	0.0	discard	x0_lambdas 0.05
+ceb5d34	1.296322	0.0	discard	MLP c_proj init
+be1d847	1.288615	0.0	discard	UNEMBED_LR 0.0035
+00cffcc	1.288817	0.0	discard	EMBEDDING_LR 0.3
+338c975	1.290593	0.0	discard	dual MLP 3x+3x
