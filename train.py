@@ -132,14 +132,39 @@ class MLP(nn.Module):
         return x
 
 
+class CausalConvMixer(nn.Module):
+    """Fast O(T) causal depthwise conv mixer to replace attention in local layers."""
+    def __init__(self, config):
+        super().__init__()
+        self.dwconv = nn.Conv1d(config.n_embd, config.n_embd, kernel_size=15,
+                                padding=14, groups=config.n_embd, bias=False)
+        self.c_proj = nn.Linear(config.n_embd, config.n_embd, bias=False)
+
+    def forward(self, x, ve=None, cos_sin=None, window_size=None):
+        # x: [B, T, C]
+        h = self.dwconv(x.transpose(1, 2))[:, :, :x.size(1)]  # causal: trim right padding
+        return self.c_proj(h.transpose(1, 2))
+
+
 class Block(nn.Module):
     def __init__(self, config, layer_idx):
         super().__init__()
-        self.attn = CausalSelfAttention(config, layer_idx)
+        # Use conv mixer for short-window layers, attention for long/last layers
+        pattern = config.window_pattern.upper()
+        char = pattern[layer_idx % len(pattern)]
+        is_last = (layer_idx == config.n_layer - 1)
+        self.use_attn = (char == 'L') or is_last
+        if self.use_attn:
+            self.attn = CausalSelfAttention(config, layer_idx)
+        else:
+            self.mixer = CausalConvMixer(config)
         self.mlp = MLP(config)
 
     def forward(self, x, ve, cos_sin, window_size):
-        x = x + self.attn(norm(x), ve, cos_sin, window_size)
+        if self.use_attn:
+            x = x + self.attn(norm(x), ve, cos_sin, window_size)
+        else:
+            x = x + self.mixer(norm(x))
         x = x + self.mlp(norm(x))
         return x
 
@@ -178,10 +203,14 @@ class GPT(nn.Module):
         n_embd = self.config.n_embd
         s = 3**0.5 * n_embd**-0.5
         for block in self.transformer.h:
-            torch.nn.init.uniform_(block.attn.c_q.weight, -s, s)
-            torch.nn.init.uniform_(block.attn.c_k.weight, -s, s)
-            torch.nn.init.uniform_(block.attn.c_v.weight, -s, s)
-            torch.nn.init.zeros_(block.attn.c_proj.weight)
+            if block.use_attn:
+                torch.nn.init.uniform_(block.attn.c_q.weight, -s, s)
+                torch.nn.init.uniform_(block.attn.c_k.weight, -s, s)
+                torch.nn.init.uniform_(block.attn.c_v.weight, -s, s)
+                torch.nn.init.zeros_(block.attn.c_proj.weight)
+            else:
+                torch.nn.init.uniform_(block.mixer.dwconv.weight, -s, s)
+                torch.nn.init.zeros_(block.mixer.c_proj.weight)
             torch.nn.init.uniform_(block.mlp.c_fc.weight, -s, s)
             torch.nn.init.zeros_(block.mlp.c_proj.weight)
         # Per-layer scalars
@@ -192,16 +221,19 @@ class GPT(nn.Module):
             torch.nn.init.uniform_(ve.weight, -s, s)
         # Gate weights init to zero (sigmoid(0)=0.5, scaled by 2 -> 1.0 = neutral)
         for block in self.transformer.h:
-            if block.attn.ve_gate is not None:
+            if block.use_attn and block.attn.ve_gate is not None:
                 torch.nn.init.zeros_(block.attn.ve_gate.weight)
         # Rotary embeddings
         head_dim = self.config.n_embd // self.config.n_head
         cos, sin = self._precompute_rotary_embeddings(self.rotary_seq_len, head_dim)
         self.cos, self.sin = cos, sin
-        # Cast embeddings to bf16
+        # Cast embeddings and conv to bf16
         self.transformer.wte.to(dtype=torch.bfloat16)
         for ve in self.value_embeds.values():
             ve.to(dtype=torch.bfloat16)
+        for block in self.transformer.h:
+            if not block.use_attn:
+                block.mixer.dwconv.to(dtype=torch.bfloat16)
 
     def _precompute_rotary_embeddings(self, seq_len, head_dim, base=10000, device=None):
         if device is None:
@@ -259,13 +291,16 @@ class GPT(nn.Module):
     def setup_optimizer(self, unembedding_lr=0.004, embedding_lr=0.2, matrix_lr=0.02,
                         weight_decay=0.0, adam_betas=(0.8, 0.95), scalar_lr=0.5):
         model_dim = self.config.n_embd
-        matrix_params = list(self.transformer.h.parameters())
+        # Separate 2D matrix params (for Muon) from non-2D params (conv weights → AdamW)
+        all_block_params = list(self.transformer.h.parameters())
+        matrix_params = [p for p in all_block_params if p.ndim == 2]
+        conv_params = [p for p in all_block_params if p.ndim != 2]
         value_embeds_params = list(self.value_embeds.parameters())
         embedding_params = list(self.transformer.wte.parameters())
         lm_head_params = list(self.lm_head.parameters())
         resid_params = [self.resid_lambdas]
         x0_params = [self.x0_lambdas]
-        assert len(list(self.parameters())) == (len(matrix_params) + len(embedding_params) +
+        assert len(list(self.parameters())) == (len(matrix_params) + len(conv_params) + len(embedding_params) +
             len(lm_head_params) + len(value_embeds_params) + len(resid_params) + len(x0_params))
         # Scale LR ∝ 1/√dmodel (tuned at 768 dim)
         dmodel_lr_scale = (model_dim / 768) ** -0.5
@@ -277,6 +312,8 @@ class GPT(nn.Module):
             dict(kind='adamw', params=resid_params, lr=scalar_lr * 0.01, betas=adam_betas, eps=1e-10, weight_decay=0.0),
             dict(kind='adamw', params=x0_params, lr=scalar_lr, betas=(0.96, 0.95), eps=1e-10, weight_decay=0.0),
         ]
+        if conv_params:
+            param_groups.append(dict(kind='adamw', params=conv_params, lr=matrix_lr * dmodel_lr_scale, betas=adam_betas, eps=1e-10, weight_decay=0.0))
         for shape in sorted({p.shape for p in matrix_params}):
             group_params = [p for p in matrix_params if p.shape == shape]
             param_groups.append(dict(
@@ -298,7 +335,7 @@ class GPT(nn.Module):
         x0 = x
         for i, block in enumerate(self.transformer.h):
             x = self.resid_lambdas[i] * x + self.x0_lambdas[i] * x0
-            ve = self.value_embeds[str(i)](idx) if str(i) in self.value_embeds else None
+            ve = self.value_embeds[str(i)](idx) if (block.use_attn and str(i) in self.value_embeds) else None
             x = block(x, ve, cos_sin, self.window_sizes[i])
         x = norm(x)
 
