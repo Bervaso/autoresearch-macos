@@ -581,6 +581,8 @@ with torch.device("meta"):
     model = GPT(config)
 model.to_empty(device=device)
 model.init_weights()
+# Cast entire model to bf16 for faster MPS compute
+model.to(dtype=torch.bfloat16)
 
 param_counts = model.num_scaling_params()
 print("Parameter counts:")
