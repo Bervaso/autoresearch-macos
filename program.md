@@ -154,10 +154,43 @@ As an example use case, a user might leave you running while they sleep. If each
 - DEPTH=8 conv model (1.274) — too slow despite cheap conv layers
 - DEPTH=6 conv model (1.285) — too slow, 3 VE layers expensive
 
-### Guiding principles for next experiments:
-1. **Speed is king on MPS** — more steps in 5 min beats better architecture per step
-2. **Value embeddings are essential** — don't remove them (4.2M params but crucial for quality)
-3. **Hyperparams from sessions 1-2 are well-tuned** — LR, batch size, schedule are near-optimal
-4. **Conv mixer opens new design space** — exploit the speed headroom with more capacity
-5. **DEPTH=4 is the sweet spot** — more layers cost too much even with conv
-6. **Combine near-misses** — MLP 8x was 0.003 away; try it in the conv context
+### Session 3 Learnings (experiments 11-30)
+
+**Improvements kept**: MLP 8x (1.266→1.265), bf16 (1.265), curriculum 512→2048 (1.265), global ctx (1.264)
+**Total session 3 improvement**: 1.285 → 1.265 (-1.6%)
+
+**What didn't work (exps 11-30)**:
+- MLP 10x: too slow (1.267)
+- Conv kernel 31: too slow (1.273)
+- Conv kernel 7: too little context (1.271)
+- DEPTH 5-8: too slow (1.269-1.285)
+- Wider model 384 dim: too slow (1.266)
+- Multi-scale conv (3+15): slower, no gain (1.268)
+- Higher MATRIX_LR: diverges (1.267)
+- Embedding dropout: model is undertrained not overfitting (1.272)
+- Z-loss: interferes with training (1.275)
+- Weight tying: conflicting LR needs (crash)
+- Strided attention: catastrophic quality loss (1.404)
+- 3-phase curriculum 256→1024→2048: too aggressive (1.268)
+
+### Current architecture (best: 1.264608)
+- 4 layers: 3 conv (kernel=15 + cumulative mean global ctx) + 1 attention
+- 256 dim, 2 heads (HEAD_DIM=128), MLP 8x ReLU²
+- Value embeddings on attention layer only (2.1M params)
+- Full bf16, sequence curriculum (512 first half, 2048 second half)
+- ~2179 steps in 5 min on MPS
+
+### Guiding principles:
+1. **Speed is king on MPS** — more steps > better architecture
+2. **Value embeddings are essential** for quality
+3. **DEPTH=4, MLP 8x** is the sweet spot for speed/quality
+4. **Model is undertrained (36M tokens, 12M params)** — don't regularize
+5. **Hyperparams are near-optimal** — LR/schedule tuning gives < 0.002
+6. **Need fundamentally different approach** to reach 1.200 (5% more)
+
+### Ideas not yet explored:
+- Linear RNN / state space model (RWKV/Mamba-style)
+- Mixture of Experts (2 MLPs, route tokens)
+- Learned token merging (reduce T mid-network)
+- Auxiliary loss (next-next-token prediction)
+- Progressive widening (start narrow, grow)
