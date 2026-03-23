@@ -134,3 +134,30 @@ Pure greedy hill-climbing (keep only improvements) risks getting permanently stu
 **NEVER STOP**: Once the experiment loop has begun (after the initial setup), do NOT pause to ask the human if you should continue. Do NOT ask "should I keep going?" or "is this a good stopping point?". The human might be asleep, or gone from a computer and expects you to continue working *indefinitely* until you are manually stopped. You are autonomous. If you run out of ideas, think harder — read papers referenced in the code, re-read the in-scope files for new angles, try combining previous near-misses, try more radical architectural changes. The loop runs until the human interrupts you, period.
 
 As an example use case, a user might leave you running while they sleep. If each experiment takes you ~5 minutes then you can run approx 12/hour, for a total of about 100 over the duration of the average human sleep. The user then wakes up to experimental results, all completed by you while they slept!
+
+## Session 3 Learnings (experiments 1-10)
+
+### Key breakthrough: Conv mixer replaces attention in local layers
+- Replacing 3/4 attention layers with causal depthwise conv (kernel=15) gave -0.018 bpb
+- On MPS, attention is the bottleneck. Conv is 2.3x faster → 2270 vs 1000 steps in 5 min
+- The speed gain from more training steps outweighs the quality loss from weaker local mixing
+- One full attention layer (the last/global layer) still provides long-range context
+
+### What didn't work:
+- SwiGLU activation (1.305 vs 1.285) — ReLU² is better at this small scale
+- Increasing DEPTH without conv (1.338 with DEPTH=6) — too slow, undertrained
+- HEAD_DIM 128→64 (1.318) — fewer dims per head hurt
+- MLP 8x (1.289) — near miss but slightly worse
+- Removing value embeddings (1.308) — VE are essential for quality
+- Smaller batch size (1.302) — 16K batch already optimal
+- Warmup + reduced warmdown (1.296) — current schedule is well-tuned
+- DEPTH=8 conv model (1.274) — too slow despite cheap conv layers
+- DEPTH=6 conv model (1.285) — too slow, 3 VE layers expensive
+
+### Guiding principles for next experiments:
+1. **Speed is king on MPS** — more steps in 5 min beats better architecture per step
+2. **Value embeddings are essential** — don't remove them (4.2M params but crucial for quality)
+3. **Hyperparams from sessions 1-2 are well-tuned** — LR, batch size, schedule are near-optimal
+4. **Conv mixer opens new design space** — exploit the speed headroom with more capacity
+5. **DEPTH=4 is the sweet spot** — more layers cost too much even with conv
+6. **Combine near-misses** — MLP 8x was 0.003 away; try it in the conv context
