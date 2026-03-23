@@ -652,8 +652,19 @@ while True:
     sync_device(device_type)
     t0 = time.time()
     for micro_step in range(grad_accum_steps):
+        # Sequence length curriculum: short seqs in first half for more steps
+        progress_est = min(total_training_time / TIME_BUDGET, 1.0)
+        if progress_est < 0.5:
+            # Reshape [B, T] to [B*4, T//4] for 4x shorter sequences
+            B_orig, T_orig = x.shape
+            factor = 4
+            short_T = T_orig // factor
+            x_curr = x.view(B_orig * factor, short_T)
+            y_curr = y.view(B_orig * factor, short_T)
+        else:
+            x_curr, y_curr = x, y
         with autocast_ctx:
-            loss = model(x, y)
+            loss = model(x_curr, y_curr)
         train_loss = loss.detach()
         loss = loss / grad_accum_steps
         loss.backward()
