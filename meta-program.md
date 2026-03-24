@@ -24,11 +24,12 @@ justifies changing them:
 
 ## YOUR MISSION
 
-Starting val_bpb: **1.285372** (best from sessions 1 and 2).
+Starting val_bpb: **1.261259** (best from session 3).
 Target val_bpb: **below 1.200**.
-This is a 6.6% improvement — ambitious but achievable through architectural
-innovation and smarter search. Hyperparameter tweaking alone will not get
-you there. You need ideas from recent ML research.
+This is a 4.8% improvement. Hyperparameter tweaking is exhausted.
+Only fundamental architectural changes can get you there.
+The agent in session 3 identified **Mixture of Experts** as the most
+promising unexplored direction. Start there.
 
 ---
 
@@ -53,56 +54,58 @@ This makes your research strategy itself an evolving artifact.
 
 ---
 
-## RESEARCH DIRECTIONS — WHERE TO LOOK FOR BREAKTHROUGHS
+## RESEARCH DIRECTIONS FOR SESSION 4
 
-The previous sessions exhausted basic hyperparameter tuning. To reach 1.200
-you need architectural ideas. Here are directions worth exploring, drawn
-from recent ML research (you know these from your training data):
+Sessions 1-3 have exhausted hyperparameter tuning and basic architecture
+search. The current best architecture is:
+- 4 layers: 3 causal depthwise conv (kernel=15) + 1 attention
+- 256 dim, 2 heads, MLP 8x ReLU², LayerNorm
+- Value embeddings on attention layer only
+- Sequence curriculum 512→2048, full bf16
+- ~2395 steps in 5 minutes on MPS
 
-### High priority — most likely to help on MPS with fixed 5-min budget:
+### Priority 1 — Mixture of Experts (start here)
 
-**1. Efficient attention alternatives**
-- Linear attention (e.g. RWKV-style or RetNet-style recurrence) — O(T)
-  instead of O(T²). On MPS where attention is slow, this could allow
-  more training steps.
-- GLA (Gated Linear Attention) — combines gating with linear complexity.
-  Implementable in pure PyTorch, no new dependencies.
+MoE gives 2x model capacity at the same compute cost. Implementation:
+- Add a router (small linear layer) that scores each token for 2 expert MLPs
+- Each token is processed by only 1 expert (top-1 routing)
+- Net effect: same FLOPs per step, but 2x the MLP parameters
+- Add a small load balancing loss to prevent all tokens routing to one expert
+- Try on the MLP layers of the conv blocks first (cheaper than attention)
 
-**2. Better MLP design**
-- The current ReLU² activation is good but explore GLU variants that don't
-  require SwiGLU's extra parameters (e.g. bilinear layers, gated ReLU).
-- Mixture of depths: not all tokens need the same computation.
+This is the single most promising untried direction. Spend at least
+5 experiments here before moving on.
 
-**3. Improved residual and normalization**
-- Pre-norm vs post-norm vs sandwich-norm — try combinations.
-- Deep-norm initialization (scale residuals by N^(-1/4)) for more stable
-  training with fewer steps.
-- RMSNorm with learnable scale already exists — try removing the scale
-  entirely (plain RMSNorm) to reduce parameters and speed up steps.
+### Priority 2 — Learned token merging (if MoE stalls)
 
-**4. Smarter learning rate schedules**
-- Trapezoidal schedule (warmup → flat → linear decay) instead of cosine.
-- Cyclic LR within the 5-minute budget — multiple mini-cycles may explore
-  the loss landscape better than one long warmdown.
-- WSD (Warmup-Stable-Decay) schedule recently shown to outperform cosine.
+Reduce sequence length mid-network using learned pooling:
+- After the first 2 conv layers, merge adjacent token pairs (T → T/2)
+- Process the merged sequence through the remaining layers
+- This halves the cost of the attention layer → more training steps
+- Implementable in pure PyTorch with learned linear projection for merging
 
-**5. Token mixing alternatives**
-- The current window pattern SSSL uses local attention. Try combining with
-  a single global pooling layer (like in Hyena or H3) instead of full
-  attention for global context.
+### Priority 3 — Gated Linear Attention (if token merging stalls)
 
-**6. Optimizer improvements**
-- Adan optimizer: uses both first and second-order gradient differences.
-  Implementable from scratch in ~30 lines of PyTorch.
-- SOAP: Shampoo-style preconditioner, shown to outperform AdamW on small
-  models. Also implementable without new dependencies.
+Replace the single attention layer with Gated Linear Attention (GLA):
+- O(T) complexity instead of O(T²) — much faster on MPS
+- Retains gating mechanism for selectivity
+- Implementable from scratch in ~40 lines of PyTorch, no new dependencies
+- Reference: GLA paper (2024) — the core idea is: h_t = G_t * h_{t-1} + k_t^T v_t
 
-### Medium priority — worth trying if high-priority ideas stall:
+### Priority 4 — WSD learning rate schedule (quick win attempt)
 
-- Rotary embedding base frequency tuning (YaRN-style scaling for short seqs)
-- Stochastic depth (randomly skip layers during training)
-- Weight sharing across layers (ALBERT-style) — fewer params, more steps
-- Learned token merging (reduce sequence length mid-network)
+Warmup-Stable-Decay: replace current cosine warmdown with:
+- 0-5%: linear warmup
+- 5-80%: constant LR
+- 80-100%: linear decay to 0
+Recent work shows WSD often outperforms cosine at small scale.
+
+### What NOT to try (already exhausted in sessions 1-3):
+- Depth changes (too slow on MPS)
+- SwiGLU, GELU activations (ReLU² is best here)
+- Batch size changes (2^14 is optimal)
+- Most LR/schedule variations
+- Standard self-attention in place of conv (too slow)
 
 ---
 
@@ -125,13 +128,12 @@ experiments.
 
 ## EXPERIMENT LOOP
 
-Branch: `autoresearch/mar20-v3`
+Branch: `autoresearch/mar20-v4`
 
 LOOP FOREVER:
 
 1. Check git state.
-2. Choose an experiment — prefer architectural ideas from the research
-   directions above over hyperparameter tweaks.
+2. Choose an experiment — follow the priority order in Research Directions.
 3. Modify `train.py`, git commit.
 4. Run: `uv run train.py > run.log 2>&1 &` then `sleep 340 && grep "^val_bpb:\|^peak_vram_mb:" run.log`
 5. Log to `results.tsv`.
@@ -140,4 +142,14 @@ LOOP FOREVER:
 
 **Timeout**: Kill and discard any run exceeding 10 minutes.
 **Crashes**: Fix trivial bugs and retry once. Skip fundamentally broken ideas.
-**NEVER STOP**: Run until the human interrupts you. Do not ask permission to continue.
+
+**NEVER STOP**: Run until the human interrupts you. Do not ask permission
+to continue. Do not summarize and stop. Do not say you are "done". Even if
+you feel you have exhausted all ideas, think harder — combine previous
+near-misses, try more radical changes, revisit the research directions above.
+The loop runs until the human types a message interrupting you. Period.
+
+**Context window management**: Every 20 experiments, write a brief status
+update to `program.md` under a new heading (e.g. "## Session 4 exps 1-20").
+This ensures your learnings are preserved even if the session restarts.
+Do this as part of the loop — it takes 30 seconds and saves everything.
