@@ -133,28 +133,16 @@ class MLP(nn.Module):
 
 
 class CausalConvMixer(nn.Module):
-    """Fast O(T) causal conv mixer with global context via causal mean pooling."""
+    """Fast O(T) causal depthwise conv mixer."""
     def __init__(self, config):
         super().__init__()
         self.dwconv = nn.Conv1d(config.n_embd, config.n_embd, kernel_size=15,
                                 padding=14, groups=config.n_embd, bias=False)
         self.c_proj = nn.Linear(config.n_embd, config.n_embd, bias=False)
-        # Learnable gate to mix local conv and global context
-        self.global_gate = nn.Linear(config.n_embd, config.n_embd, bias=False)
 
     def forward(self, x, ve=None, cos_sin=None, window_size=None):
-        # x: [B, T, C]
-        B, T, C = x.shape
-        # Local context via conv
-        h_local = self.dwconv(x.transpose(1, 2))[:, :, :T].transpose(1, 2)
-        # Global context via causal cumulative mean
-        cumsum = x.float().cumsum(dim=1)
-        counts = torch.arange(1, T + 1, device=x.device, dtype=torch.float32).view(1, -1, 1)
-        h_global = (cumsum / counts).to(x.dtype)
-        # Gated mix
-        gate = torch.sigmoid(self.global_gate(x))
-        h_mixed = gate * h_local + (1 - gate) * h_global
-        return self.c_proj(h_mixed)
+        h = self.dwconv(x.transpose(1, 2))[:, :, :x.size(1)]
+        return self.c_proj(h.transpose(1, 2))
 
 
 class Block(nn.Module):
@@ -222,7 +210,6 @@ class GPT(nn.Module):
             else:
                 torch.nn.init.uniform_(block.mixer.dwconv.weight, -s, s)
                 torch.nn.init.zeros_(block.mixer.c_proj.weight)
-                torch.nn.init.zeros_(block.mixer.global_gate.weight)  # sigmoid(0)=0.5 = balanced mix
             torch.nn.init.uniform_(block.mlp.c_fc.weight, -s, s)
             torch.nn.init.zeros_(block.mlp.c_proj.weight)
         # Per-layer scalars
