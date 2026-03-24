@@ -136,8 +136,8 @@ class CausalConvMixer(nn.Module):
     """Fast O(T) causal depthwise conv mixer."""
     def __init__(self, config):
         super().__init__()
-        self.dwconv = nn.Conv1d(config.n_embd, config.n_embd, kernel_size=11,
-                                padding=10, groups=config.n_embd, bias=False)
+        self.dwconv = nn.Conv1d(config.n_embd, config.n_embd, kernel_size=9,
+                                padding=8, groups=config.n_embd, bias=False)
         self.c_proj = nn.Linear(config.n_embd, config.n_embd, bias=False)
 
     def forward(self, x, ve=None, cos_sin=None, window_size=None):
