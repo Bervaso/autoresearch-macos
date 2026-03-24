@@ -201,8 +201,37 @@ The model is at a strong local optimum. All hyperparameters are near-optimal. In
 - Or a different way to use the 5 min budget
 - MoE remains the most promising unexplored direction
 
-### Ideas still worth exploring:
-- **Mixture of Experts**: 2 MLPs per layer, route each token to one. Same compute, 2x capacity.
-- **Deeper conv with shared MLP weights**: ALBERT-style weight sharing for MLP across conv layers
-- **Learned token merging**: reduce sequence length mid-network
-- **Different conv architecture**: gated conv (GLU-style), or replace conv with shift+linear
+## Session 4 exps 1-10: all discarded
+
+### MoE (exps 1-3): FAILED on MPS
+- Top-1 hard routing: MPS bf16 doesn't support scatter/gather in backward
+- Both-compute MoE: 2x cost for no benefit (1.275)
+- Channel gating: extra linear too expensive (1.269)
+- Split-proj (6x shared fc, 2 projs): dual proj slower than single 8x (1.272)
+**Conclusion**: MoE is architecturally incompatible with MPS speed constraints. Any extra computation per step is wasted.
+
+### Schedule (exps 4-5): FAILED
+- WSD 5/75/20: warmup still hurts (1.270)
+- WSD 0/70/30 to 0: current schedule is better (1.267)
+
+### Token merging (exp 6): CATASTROPHIC
+- T→T/2 after layer 1: 86ms/step (very fast!) but train/eval mismatch → 3.551 val_bpb
+- Eval needs full T, model only trained at T/2
+
+### Linear attention (exp 7): FAILED
+- Chunk-64 with KV state: cross-chunk linear attention too weak (1.361)
+
+### Speed-focused (exps 8-10): FAILED
+- MLP 6x no curriculum: more steps but less capacity (1.264)
+- Heterogeneous conv:6x attn:12x: attn layer too slow (1.263)
+- Inverse conv:10x attn:4x: conv MLP too slow (1.267)
+
+### Key insight after 10 experiments:
+The baseline architecture (3 conv + 1 attn, 8x MLP, curriculum) is remarkably well-optimized.
+The 1.261 optimum is incredibly hard to escape. Every change makes things worse.
+
+### Next directions to try:
+- **Two attention layers + smaller MLP**: SLSL with 6x MLP (session 3 showed SL was 1.268 but that was before LayerNorm — try again)
+- **Wider model with fewer MLP**: 384 dim with 4x MLP (session 3 result: 1.266)
+- **Add 5th layer**: DEPTH=5, AR=51, dim=256, with 6x MLP to offset
+- **Per-layer LR**: different learning rates for conv vs attention layers
