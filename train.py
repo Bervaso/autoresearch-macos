@@ -653,7 +653,7 @@ while True:
     for micro_step in range(grad_accum_steps):
         # Sequence length curriculum: short seqs in first half for more steps
         progress_est = min(total_training_time / TIME_BUDGET, 1.0)
-        if progress_est < 0.6:
+        if progress_est < 0.7:
             # Reshape [B, T] to [B*4, T//4] for 4x shorter sequences
             B_orig, T_orig = x.shape
             factor = 4
