@@ -24,3 +24,42 @@ e56c9fa	1.265725	0.0	discard	exp17: remove dead VE (no benefit)
 6068356	1.264608	0.0	keep	exp22: causal global context in conv mixer
 b6724b9	1.266994	0.0	discard	exp23: MATRIX_LR 0.02->0.03 (too aggressive)
 fe6c00e	0.000000	0.0	crash	exp24: weight tying (loss stuck, conflicting LR needs)
+5e32f14	1.268816	0.0	discard	exp25: DEPTH 5 + MLP 6x + attn-only VE
+7e06e23	1.266495	0.0	discard	exp26: wider 384 dim + MLP 4x
+5f60a5e	1.268126	0.0	discard	exp27: multi-scale conv
+84813d8	1.272189	0.0	discard	exp28: embedding dropout
+b2b5574	1.275165	0.0	discard	exp29: z-loss
+2aa3cad	1.404241	0.0	discard	exp30: strided attention
+c4efcab	1.435579	0.0	discard	exp31: all-conv no attention
+b040c02	0.000000	0.0	crash	exp32: DEPTH 6 dim=384 bug
+600ba06	1.278025	0.0	discard	exp33: stochastic depth
+a807c44	1.273139	0.0	discard	exp34: Muon ns_steps 3
+7be6e29	1.282628	0.0	discard	exp35: deep supervision
+598405e	1.267041	0.0	discard	exp36: warmdown 0.4
+1b3c737	1.265351	0.0	discard	exp37: warmdown 0.6
+1c00c73	1.268012	0.0	discard	exp38: final_lr_frac 0.0
+e50f5b8	1.268558	0.0	discard	exp39: sandwich norm
+d037771	1.272358	0.0	discard	exp40: unembed LR 0.008
+e3bbfea	1.272643	0.0	discard	exp41: soft MoE
+50884b3	1.293086	0.0	discard	exp42: EMA weights
+c089996	1.271238	0.0	discard	exp43: gated conv
+c19cf7b	1.281297	0.0	discard	exp44: ALBERT shared MLP
+faa6907	1.282981	0.0	discard	exp45: token shift
+f550159	1.267127	0.0	discard	exp46: curriculum 256/30%
+8231274	1.269734	0.0	discard	exp47: seed 137
+6f31a0a	1.265087	0.0	discard	exp48: embed LR 0.3 (near miss)
+16e2079	1.268295	0.0	discard	exp49: beta1 0.9
+cb46b72	1.266518	0.0	discard	exp50: scalar LR 2.0
+de02958	1.273519	0.0	discard	exp51: GELU activation
+eace694	1.280309	0.0	discard	exp52: ReGLU² MLP
+b158ed9	0.000000	0.0	crash	exp53: torch.compile MPS
+d6761c5	1.265485	0.0	discard	exp54: RoPE base 50000
+da6fafe	1.266830	0.0	discard	exp55: RoPE base 5000
+cbb70cd	1.269293	0.0	discard	exp56: train on 1024
+5691a09	1.265128	0.0	discard	exp57: Muon momentum ramp 1000
+7836c0b	1.281404	0.0	discard	exp58: bilinear MLP
+ab32602	1.266126	0.0	discard	exp59: batch 32K
+c9e4388	1.267380	0.0	discard	exp60: remove VE gate
+3a28535	1.266314	0.0	discard	exp61: seed 7
+1888df2	1.266568	0.0	discard	exp62: seed 1337
+2de805e	1.272705	0.0	discard	exp63: absolute position embed
