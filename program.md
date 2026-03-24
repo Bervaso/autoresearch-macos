@@ -188,9 +188,21 @@ As an example use case, a user might leave you running while they sleep. If each
 5. **Hyperparams are near-optimal** — LR/schedule tuning gives < 0.002
 6. **Need fundamentally different approach** to reach 1.200 (5% more)
 
-### Ideas not yet explored:
-- Linear RNN / state space model (RWKV/Mamba-style)
-- Mixture of Experts (2 MLPs, route tokens)
-- Learned token merging (reduce T mid-network)
-- Auxiliary loss (next-next-token prediction)
-- Progressive widening (start narrow, grow)
+### Experiments 36-40 (schedule/norm/LR tuning): all discarded
+- WARMDOWN_RATIO 0.4: 1.267, WARMDOWN_RATIO 0.6: 1.265 — 0.5 is optimal
+- FINAL_LR_FRAC 0.0: 1.268 — 0.1 is optimal
+- Sandwich norm: 1.269 — slower, no gain
+- UNEMBEDDING_LR 0.008: 1.272 — too high
+- Also failed: stochastic depth (1.278), all-conv no attention (1.436), deep supervision (1.283)
+
+### Assessment after 40 experiments:
+The model is at a strong local optimum. All hyperparameters are near-optimal. Incremental changes consistently fail. To reach 1.200 (another 5.2%):
+- Need a fundamentally different architecture class
+- Or a different way to use the 5 min budget
+- MoE remains the most promising unexplored direction
+
+### Ideas still worth exploring:
+- **Mixture of Experts**: 2 MLPs per layer, route each token to one. Same compute, 2x capacity.
+- **Deeper conv with shared MLP weights**: ALBERT-style weight sharing for MLP across conv layers
+- **Learned token merging**: reduce sequence length mid-network
+- **Different conv architecture**: gated conv (GLU-style), or replace conv with shift+linear
