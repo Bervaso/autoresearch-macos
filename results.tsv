@@ -1,2 +1,24 @@
 commit	val_bpb	memory_gb	status	description
 79d97b3	1.261259	0.0	keep	baseline (best from session 3)
+54af574	1.274783	0.0	discard	exp1: MoE 2x4x both-compute
+1ec299a	1.269293	0.0	discard	exp2: channel gating MoE
+bc62c80	1.272278	0.0	discard	exp3: split-proj MoE
+7fa7bbb	1.270428	0.0	discard	exp4: WSD 5/75/20
+6c51147	1.266656	0.0	discard	exp5: WSD 0/70/30
+b047243	3.550983	0.0	discard	exp6: token merging
+c871c5c	1.360798	0.0	discard	exp7: chunk-64 linear attn
+503788f	1.263625	0.0	discard	exp8: MLP 6x no curriculum
+ff5c912	1.267262	0.0	discard	exp10: het MLP conv:10x attn:4x
+c32b3e9	1.260496	0.0	keep	exp11: SLSL 2conv+2attn
+668816f	1.265354	0.0	discard	exp12: SLLL
+90d082f	1.274404	0.0	discard	exp13: all-L
+ff5a5e0	1.261413	0.0	discard	exp14: MLP 6x SLSL
+e5c3c11	1.267686	0.0	discard	exp15: SLSL no curriculum
+ab088f4	1.264296	0.0	discard	exp16: DEPTH 5 SLSL
+9e2e906	1.262097	0.0	discard	exp17: MATRIX_LR 0.015
+8adc106	1.261177	0.0	discard	exp18: EMBEDDING_LR 0.3
+6a8ba45	1.260191	0.0	keep	exp19: curriculum 60/40
+835bdc0	1.258940	0.0	keep	exp20: curriculum 70/30
+acdf531	1.261364	0.0	discard	exp21: curriculum 80/20
+6f8beb5	1.262061	0.0	discard	exp22: curriculum 1024
+c19c015	1.259904	0.0	discard	exp23: 3-phase curriculum
