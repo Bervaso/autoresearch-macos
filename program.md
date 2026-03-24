@@ -230,8 +230,32 @@ The model is at a strong local optimum. All hyperparameters are near-optimal. In
 The baseline architecture (3 conv + 1 attn, 8x MLP, curriculum) is remarkably well-optimized.
 The 1.261 optimum is incredibly hard to escape. Every change makes things worse.
 
-### Next directions to try:
-- **Two attention layers + smaller MLP**: SLSL with 6x MLP (session 3 showed SL was 1.268 but that was before LayerNorm — try again)
-- **Wider model with fewer MLP**: 384 dim with 4x MLP (session 3 result: 1.266)
-- **Add 5th layer**: DEPTH=5, AR=51, dim=256, with 6x MLP to offset
-- **Per-layer LR**: different learning rates for conv vs attention layers
+## Session 4 exps 11-40
+
+### Breakthroughs:
+- **exp11: SLSL pattern** (2conv+2attn) → 1.260 (LayerNorm made 2-attn viable)
+- **exp19-20: curriculum 60→70/30** → 1.259 (more short-seq steps helps)
+- **exp25: 384 dim + MLP 4x** → 1.256 (wider model with SLSL is better!)
+- **exp30: MLP 5x at 384 dim** → 1.255 (sweet spot between 4x and 6x)
+
+### Current best architecture (1.255415):
+- **384 dim, 3 heads** (HEAD_DIM=128)
+- **SLSL** pattern (2 conv + 2 attn, alternating)
+- **MLP 5x** with ReLU², LayerNorm, bf16
+- **70/30 curriculum** (512/2048), VE on both attn layers
+- ~1664 steps in 5 min on MPS
+
+### Confirmed optimal (exps 31-40):
+- WARMDOWN 0.5 is optimal (0.4 and 0.6 both worse)
+- 70/30 curriculum is optimal (80/20 too little full-length)
+- SLSL > SSLL > SLLL > LLLL (alternating is key)
+- HEAD_DIM=128 (64 still bad)
+- Full MHA (GQA 1KV worse)
+- DEPTH 4 > DEPTH 3 > DEPTH 5 (at 384 dim)
+- MATRIX_LR 0.02 still optimal
+- BATCH 16K still optimal
+
+### What to try next:
+- Different dim: try 320 dim (2.5*128) with MLP 6x
+- conv kernel tuning at 384 dim (currently 15)
+- Different curriculum reshape factor (try 2x instead of 4x)
