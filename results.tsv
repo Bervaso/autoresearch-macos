@@ -63,3 +63,5 @@ c9e4388	1.267380	0.0	discard	exp60: remove VE gate
 3a28535	1.266314	0.0	discard	exp61: seed 7
 1888df2	1.266568	0.0	discard	exp62: seed 1337
 2de805e	1.272705	0.0	discard	exp63: absolute position embed
+a0f4d28	1.261670	0.0	keep	exp66: LayerNorm instead of RMSNorm (-0.003 bpb)
+47bdb2d	1.261259	0.0	keep	exp67: remove global ctx (simpler, faster, -0.0004 bpb)
